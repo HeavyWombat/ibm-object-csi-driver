@@ -38,7 +38,7 @@ type rcloneMounter struct {
 	mountOptions  []string
 }
 
-func updateMountOptions(dafaultMountOptions []string, secretMap map[string]string) ([]string, error) {
+func UpdateMountOptions(dafaultMountOptions []string, secretMap map[string]string) ([]string, error) {
 	mountOptsMap := make(map[string]string)
 
 	// Create map out of array
@@ -141,7 +141,7 @@ func newRcloneMounter(secretMap map[string]string, mountOptions []string) (Mount
 	klog.Infof("newRcloneMounter args:\n\tbucketName: [%s]\n\tobjPath: [%s]\n\tendPoint: [%s]\n\tlocationConstraint: [%s]\n\tauthType: [%s]",
 		mounter.bucketName, mounter.objPath, mounter.endPoint, mounter.locConstraint, mounter.authType)
 
-	updatedOptions, err := updateMountOptions(mountOptions, secretMap)
+	updatedOptions, err := UpdateMountOptions(mountOptions, secretMap)
 
 	if err != nil {
 		klog.Infof("Problems with retrieving secret map dynamically %v", err)

@@ -13,29 +13,58 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package fake
+package mounter
 
 import (
 	"github.com/IBM/ibm-object-csi-driver/pkg/mounter"
 	"k8s.io/klog/v2"
+	"time"
 )
 
 const (
-	s3fsMounterType = "s3fs"
+	s3fsMounterType   = "s3fs"
 	rcloneMounterType = "rclone"
 )
 
-// func newS3fsMounter(bucket string, objpath string, endpoint string, region string, keys string)
-func NewMounter(mounter string, bucket string, objpath string, endpoint string, region string, keys string, authType string, kpCrn string) (mounter.Mounter, error) {
+type FakeMounter struct {
+	MountFunc   func(source, target string) error
+	UnmountFunc func(target string) error
+}
+
+func (f *FakeMounter) Mount(source, target string) error {
+	if f.MountFunc != nil {
+		return f.MountFunc(source, target)
+	}
+	return nil
+}
+
+func (f *FakeMounter) Unmount(target string) error {
+	if f.UnmountFunc != nil {
+		return f.UnmountFunc(target)
+	}
+	return nil
+}
+
+func NewFakeMounter(attrib map[string]string, secretMap map[string]string, mountFlags []string) (*FakeMounter, error) {
 	klog.Info("-NewMounter-")
-	klog.Infof("NewMounter args:\n\tmounter: <%s>\n\tbucket: <%s>\n\tobjpath: <%s>\n\tendpoint: <%s>\n\tregion: <%s>", mounter, bucket, objpath, endpoint, region)
+	var mounter, val string
+	var check bool
+
+	// Select mounter as per storage class
+	if val, check = attrib["mounter"]; check {
+		mounter = val
+	} else {
+		// if mounter not set in storage class
+		if val, check = secretMap["mounter"]; check {
+			mounter = val
+		}
+	}
 	switch mounter {
 	case s3fsMounterType:
-		return fakenewS3fsMounter(bucket, objpath, endpoint, region, keys, authType, kpCrn)
+		return fakenewS3fsMounter(secretMap, mountFlags)
 	case rcloneMounterType:
-		return fakenewRcloneMounter(bucket, objpath, endpoint, region, keys, authType, kpCrn, "", "")
+		return fakenewRcloneMounter(secretMap, mountFlags)
 	default:
-		// default to s3backer
-		return fakenewS3fsMounter(bucket, objpath, endpoint, region, keys, authType, kpCrn)
+		return fakenewS3fsMounter(secretMap, mountFlags)
 	}
 }

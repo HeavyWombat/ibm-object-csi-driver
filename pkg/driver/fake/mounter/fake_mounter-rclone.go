@@ -13,48 +13,98 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package fake
+package mounter
 
 import (
-"github.com/IBM/ibm-object-csi-driver/pkg/mounter"
-"k8s.io/klog/v2"
+	"fmt"
+	"github.com/IBM/ibm-object-csi-driver/pkg/mounter"
+	"k8s.io/klog/v2"
 )
 
-// Mounter interface defined in mounter.go
-// s3fsMounter Implements Mounter
-type fakercloneMounter struct {
-	bucketName    string //From Secret in SC
-	objPath       string //From Secret in SC
-	endPoint      string //From Secret in SC
-	locConstraint string //From Secret in SC
-	authType      string
-	accessKeys    string
-	kpRootKeyCrn  string
-	uid           string
-	gid           string
+type FakeRcloneMounter struct {
+	MountFunc   func(source string, target string) error
+	UnmountFunc func(target string) error
 }
 
-func fakenewRcloneMounter(bucket string, objpath string, endpoint string, region string, keys string, authType, kpCrn, uid, gid string) (mounter.Mounter, error) {
+func fakenewRcloneMounter(secretMap map[string]string, mountOptions []string) (mounter.Mounter, error) {
 	klog.Infof("-newS3fsMounter-")
-	klog.Infof("newS3fsMounter args:\n\tbucket: <%s>\n\tobjpath: <%s>\n\tendpoint: <%s>\n\tregion: <%s>\n\tkeys: <%s>", bucket, objpath, endpoint, region, keys)
-	return &fakercloneMounter{
-		bucketName: bucket,
-		objPath:    objpath,
-		endPoint:   endpoint,
-		locConstraint:  region,
-		accessKeys: keys,
-		authType:   authType,
-		kpRootKeyCrn: kpCrn,
-		uid: uid,
-		gid: gid,
-	}, nil
+
+	var (
+		val         string
+		check       bool
+		accessKey   string
+		secretKey   string
+		apiKey      string
+		fakemounter *mounter.rcloneMounter
+	)
+
+	fakemounter = &rcloneMounter{}
+
+	if val, check = secretMap["cosEndpoint"]; check {
+		fakemounter.endPoint = val
+	}
+	if val, check = secretMap["locationConstraint"]; check {
+		fakemounter.locConstraint = val
+	}
+	if val, check = secretMap["bucketName"]; check {
+		fakemounter.bucketName = val
+	}
+	if val, check = secretMap["objPath"]; check {
+		fakemounter.objPath = val
+	}
+	if val, check = secretMap["accessKey"]; check {
+		accessKey = val
+	}
+	if val, check = secretMap["secretKey"]; check {
+		secretKey = val
+	}
+	if val, check = secretMap["kpRootKeyCRN"]; check {
+		fakemounter.kpRootKeyCrn = val
+	}
+	if val, check = secretMap["apiKey"]; check {
+		apiKey = val
+	}
+	if apiKey != "" {
+		fakemounter.accessKeys = fmt.Sprintf(":%s", apiKey)
+		fakemounter.authType = "iam"
+	} else {
+		fakemounter.accessKeys = fmt.Sprintf("%s:%s", accessKey, secretKey)
+		fakemounter.authType = "hmac"
+	}
+
+	if val, check = secretMap["gid"]; check {
+		fakemounter.gid = val
+	}
+	if secretMap["gid"] != "" && secretMap["uid"] == "" {
+		fakemounter.uid = secretMap["gid"]
+	} else if secretMap["uid"] != "" {
+		fakemounter.uid = secretMap["uid"]
+	}
+
+	klog.Infof("newRcloneMounter args:\n\tbucketName: [%s]\n\tobjPath: [%s]\n\tendPoint: [%s]\n\tlocationConstraint: [%s]\n\tauthType: [%s]",
+		fakemounter.bucketName, fakemounter.objPath, fakemounter.endPoint, fakemounter.locConstraint, fakemounter.authType)
+
+	updatedOptions, err := mounter.UpdateMountOptions(mountOptions, secretMap)
+
+	if err != nil {
+		klog.Infof("Problems with retrieving secret map dynamically %v", err)
+	}
+	fakemounter.mountOptions = updatedOptions
+
+	return fakemounter, nil
+	//return &FakeRcloneMounter{}, nil
 }
 
-func (s3fs *fakercloneMounter) Mount(source string, target string) error {
+func (f *FakeRcloneMounter) Mount(source string, target string) error {
+	if f.MountFunc != nil {
+		return f.MountFunc(source, target)
+	}
 	return nil
 }
 
-func (s3fs *fakercloneMounter) Unmount(target string) error {
+func (f *FakeRcloneMounter) Unmount(target string) error {
+	if f.UnmountFunc != nil {
+		return f.UnmountFunc(target)
+	}
 	return nil
 }
-
