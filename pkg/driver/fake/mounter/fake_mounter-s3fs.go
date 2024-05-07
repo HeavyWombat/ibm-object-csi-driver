@@ -17,7 +17,7 @@ package mounter
 
 import (
 	"fmt"
-	"github.com/IBM/ibm-object-csi-driver/pkg/mounter"
+	mounter "github.com/IBM/ibm-object-csi-driver/pkg/mounter"
 	"k8s.io/klog/v2"
 )
 
@@ -28,29 +28,29 @@ type FakeS3fsMounter struct {
 	UnmountFunc func(target string) error
 }
 
-func fakenewS3fsMounter(secretMap map[string]string, mountOptions []string) (mounter.Mounter, error) {
+func FakeNewS3fsMounter(secretMap map[string]string, mountOptions []string) (mounter.Mounter, error) {
 	var (
 		val         string
 		check       bool
 		accessKey   string
 		secretKey   string
 		apiKey      string
-		fakemounter *mounter.s3fsMounter
+		fakemounter *mounter.S3fsMounter
 	)
 
-	fakemounter = &s3fsMounter{}
+	fakemounter = &(mounter.S3fsMounter{})
 
 	if val, check = secretMap["cosEndpoint"]; check {
-		fakemounter.endPoint = val
+		fakemounter.EndPoint = val
 	}
 	if val, check = secretMap["locationConstraint"]; check {
-		fakemounter.locConstraint = val
+		fakemounter.LocConstraint = val
 	}
 	if val, check = secretMap["bucketName"]; check {
-		fakemounter.bucketName = val
+		fakemounter.BucketName = val
 	}
 	if val, check = secretMap["objPath"]; check {
-		fakemounter.objPath = val
+		fakemounter.ObjPath = val
 	}
 	if val, check = secretMap["accessKey"]; check {
 		accessKey = val
@@ -62,28 +62,27 @@ func fakenewS3fsMounter(secretMap map[string]string, mountOptions []string) (mou
 		apiKey = val
 	}
 	if val, check = secretMap["kpRootKeyCRN"]; check {
-		fakemounter.kpRootKeyCrn = val
+		fakemounter.KpRootKeyCrn = val
 	}
 
 	if apiKey != "" {
-		fakemounter.accessKeys = fmt.Sprintf(":%s", apiKey)
-		fakemounter.authType = "iam"
+		fakemounter.AccessKeys = fmt.Sprintf(":%s", apiKey)
+		fakemounter.AuthType = "iam"
 	} else {
-		fakemounter.accessKeys = fmt.Sprintf("%s:%s", accessKey, secretKey)
-		fakemounter.authType = "hmac"
+		fakemounter.AccessKeys = fmt.Sprintf("%s:%s", accessKey, secretKey)
+		fakemounter.AuthType = "hmac"
 	}
 
 	klog.Infof("newS3fsMounter args:\n\tbucketName: [%s]\n\tobjPath: [%s]\n\tendPoint: [%s]\n\tlocationConstraint: [%s]\n\tauthType: [%s]kpRootKeyCrn: [%s]",
-		fakemounter.bucketName, fakemounter.objPath, fakemounter.endPoint, fakemounter.locConstraint, fakemounter.authType, fakemounter.kpRootKeyCrn)
+		fakemounter.BucketName, fakemounter.ObjPath, fakemounter.EndPoint, fakemounter.LocConstraint, fakemounter.AuthType, fakemounter.KpRootKeyCrn)
 
 	updatedOptions, err := mounter.UpdateS3FSMountOptions(mountOptions, secretMap)
 	if err != nil {
 		klog.Infof("Problems with retrieving secret map dynamically %v", err)
 	}
-	fakemounter.mountOptions = updatedOptions
+	fakemounter.MountOptions = updatedOptions
 
 	return fakemounter, nil
-	//return &FakeS3fsMounter{}, nil
 }
 
 func (f *FakeS3fsMounter) Mount(source string, target string) error {

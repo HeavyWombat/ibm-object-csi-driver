@@ -2,22 +2,17 @@ package mounter
 
 import (
 	"errors"
-	"fmt"
-	"os"
-	"os/exec"
-	"strings"
-	"syscall"
-	"time"
-
 	"k8s.io/klog/v2"
+	"os"
+	"syscall"
+
+	"github.com/IBM/ibm-object-csi-driver/pkg/utils"
 )
 
 type Mounter interface {
 	Mount(source string, target string) error
 	Unmount(target string) error
 }
-
-var command = exec.Command
 
 const (
 	s3fsMounterType   = "s3fs"
@@ -48,35 +43,18 @@ func (s *S3fsMounterFactory) NewMounter(attrib map[string]string, secretMap map[
 			mounter = val
 		}
 	}
+
+	statsUtils := &(utils.VolumeStatsUtils{})
+
 	switch mounter {
 	case s3fsMounterType:
-		return newS3fsMounter(secretMap, mountFlags)
+		return NewS3fsMounter(secretMap, mountFlags, *statsUtils)
 	case rcloneMounterType:
-		return newRcloneMounter(secretMap, mountFlags)
+		return NewRcloneMounter(secretMap, mountFlags, *statsUtils)
 	default:
 		// default to s3backer
-		return newS3fsMounter(secretMap, mountFlags)
+		return NewS3fsMounter(secretMap, mountFlags, *statsUtils)
 	}
-}
-
-func fuseMount(path string, comm string, args []string) error {
-	klog.Info("-fuseMount-")
-	klog.Infof("fuseMount args:\n\tpath: <%s>\n\tcommand: <%s>\n\targs: <%s>", path, comm, args)
-	cmd := command(comm, args...)
-	err := cmd.Start()
-
-	if err != nil {
-		klog.Errorf("fuseMount: cmd start failed: <%s>\nargs: <%s>\nerror: <%v>", comm, args, err)
-		return fmt.Errorf("fuseMount: cmd start failed: <%s>\nargs: <%s>\nerror: <%v>", comm, args, err)
-	}
-	err = cmd.Wait()
-	if err != nil {
-		// Handle error
-		klog.Errorf("fuseMount: cmd wait failed: <%s>\nargs: <%s>\nerror: <%v>", comm, args, err)
-		return fmt.Errorf("fuseMount: cmd wait failed: <%s>\nargs: <%s>\nerror: <%v>", comm, args, err)
-	}
-
-	return waitForMount(path, 10*time.Second)
 }
 
 func checkPath(path string) (bool, error) {
@@ -124,26 +102,4 @@ func writePass(pwFileName string, pwFileContent string) error {
 		return err
 	}
 	return nil
-}
-
-func waitForMount(path string, timeout time.Duration) error {
-	var elapsed time.Duration
-	var interval = 10 * time.Millisecond
-	for {
-		out, err := exec.Command("mountpoint", path).CombinedOutput()
-		outStr := strings.TrimSpace(string(out))
-		if err != nil {
-			return err
-		}
-		if strings.HasSuffix(outStr, "is a mountpoint") {
-			klog.Infof("Path is a mountpoint: pathname - %s", path)
-			return nil
-		}
-
-		time.Sleep(interval)
-		elapsed = elapsed + interval
-		if elapsed >= timeout {
-			return errors.New("timeout waiting for mount")
-		}
-	}
 }

@@ -18,7 +18,6 @@ package mounter
 import (
 	"github.com/IBM/ibm-object-csi-driver/pkg/mounter"
 	"k8s.io/klog/v2"
-	"time"
 )
 
 const (
@@ -45,7 +44,13 @@ func (f *FakeMounter) Unmount(target string) error {
 	return nil
 }
 
-func NewFakeMounter(attrib map[string]string, secretMap map[string]string, mountFlags []string) (*FakeMounter, error) {
+type FakeMounterFactory struct{}
+
+func NewFakeMounterFactory() *FakeMounterFactory {
+	return &FakeMounterFactory{}
+}
+
+func (f *FakeMounterFactory) NewMounter(attrib map[string]string, secretMap map[string]string, mountFlags []string) (mounter.Mounter, error) {
 	klog.Info("-NewMounter-")
 	var mounter, val string
 	var check bool
@@ -61,10 +66,10 @@ func NewFakeMounter(attrib map[string]string, secretMap map[string]string, mount
 	}
 	switch mounter {
 	case s3fsMounterType:
-		return fakenewS3fsMounter(secretMap, mountFlags)
+		return FakeNewS3fsMounter(secretMap, mountFlags)
 	case rcloneMounterType:
-		return fakenewRcloneMounter(secretMap, mountFlags)
+		return FakeNewRcloneMounter(secretMap, mountFlags)
 	default:
-		return fakenewS3fsMounter(secretMap, mountFlags)
+		return FakeNewS3fsMounter(secretMap, mountFlags)
 	}
 }

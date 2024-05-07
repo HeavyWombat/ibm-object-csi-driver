@@ -23,16 +23,17 @@ import (
 )
 
 // Mounter interface defined in mounter.go
-// s3fsMounter Implements Mounter
-type s3fsMounter struct {
-	bucketName    string //From Secret in SC
-	objPath       string //From Secret in SC
-	endPoint      string //From Secret in SC
-	locConstraint string //From Secret in SC
-	authType      string
-	accessKeys    string
-	kpRootKeyCrn  string
-	mountOptions  []string
+// S3fsMounter Implements Mounter
+type S3fsMounter struct {
+	BucketName    string //From Secret in SC
+	ObjPath       string //From Secret in SC
+	EndPoint      string //From Secret in SC
+	LocConstraint string //From Secret in SC
+	AuthType      string
+	AccessKeys    string
+	KpRootKeyCrn  string
+	MountOptions  []string
+	StatsUtils    utils.VolumeStatsUtils
 }
 
 const (
@@ -43,7 +44,7 @@ const (
 	defaultIAMEndPoint = "https://iam.cloud.ibm.com"
 )
 
-func newS3fsMounter(secretMap map[string]string, mountOptions []string) (Mounter, error) {
+func NewS3fsMounter(secretMap map[string]string, mountOptions []string, statsUtils utils.VolumeStatsUtils) (Mounter, error) {
 	klog.Info("-newS3fsMounter-")
 
 	var (
@@ -52,22 +53,22 @@ func newS3fsMounter(secretMap map[string]string, mountOptions []string) (Mounter
 		accessKey string
 		secretKey string
 		apiKey    string
-		mounter   *s3fsMounter
+		mounter   *S3fsMounter
 	)
 
-	mounter = &s3fsMounter{}
+	mounter = &S3fsMounter{}
 
 	if val, check = secretMap["cosEndpoint"]; check {
-		mounter.endPoint = val
+		mounter.EndPoint = val
 	}
 	if val, check = secretMap["locationConstraint"]; check {
-		mounter.locConstraint = val
+		mounter.LocConstraint = val
 	}
 	if val, check = secretMap["bucketName"]; check {
-		mounter.bucketName = val
+		mounter.BucketName = val
 	}
 	if val, check = secretMap["objPath"]; check {
-		mounter.objPath = val
+		mounter.ObjPath = val
 	}
 	if val, check = secretMap["accessKey"]; check {
 		accessKey = val
@@ -79,30 +80,32 @@ func newS3fsMounter(secretMap map[string]string, mountOptions []string) (Mounter
 		apiKey = val
 	}
 	if val, check = secretMap["kpRootKeyCRN"]; check {
-		mounter.kpRootKeyCrn = val
+		mounter.KpRootKeyCrn = val
 	}
 
 	if apiKey != "" {
-		mounter.accessKeys = fmt.Sprintf(":%s", apiKey)
-		mounter.authType = "iam"
+		mounter.AccessKeys = fmt.Sprintf(":%s", apiKey)
+		mounter.AuthType = "iam"
 	} else {
-		mounter.accessKeys = fmt.Sprintf("%s:%s", accessKey, secretKey)
-		mounter.authType = "hmac"
+		mounter.AccessKeys = fmt.Sprintf("%s:%s", accessKey, secretKey)
+		mounter.AuthType = "hmac"
 	}
 
 	klog.Infof("newS3fsMounter args:\n\tbucketName: [%s]\n\tobjPath: [%s]\n\tendPoint: [%s]\n\tlocationConstraint: [%s]\n\tauthType: [%s]kpRootKeyCrn: [%s]",
-		mounter.bucketName, mounter.objPath, mounter.endPoint, mounter.locConstraint, mounter.authType, mounter.kpRootKeyCrn)
+		mounter.BucketName, mounter.ObjPath, mounter.EndPoint, mounter.LocConstraint, mounter.AuthType, mounter.KpRootKeyCrn)
 
 	updatedOptions, err := UpdateS3FSMountOptions(mountOptions, secretMap)
 	if err != nil {
 		klog.Infof("Problems with retrieving secret map dynamically %v", err)
 	}
-	mounter.mountOptions = updatedOptions
+	mounter.MountOptions = updatedOptions
+
+	mounter.StatsUtils = statsUtils
 
 	return mounter, nil
 }
 
-func (s3fs *s3fsMounter) Mount(source string, target string) error {
+func (s3fs *S3fsMounter) Mount(source string, target string) error {
 	klog.Info("-S3FSMounter Mount-")
 	klog.Infof("Mount args:\n\tsource: <%s>\n\ttarget: <%s>", source, target)
 	var bucketName string
@@ -124,15 +127,15 @@ func (s3fs *s3fsMounter) Mount(source string, target string) error {
 	}
 
 	passwdFile := path.Join(metaPath, passFile)
-	if err = writePass(passwdFile, s3fs.accessKeys); err != nil {
+	if err = writePass(passwdFile, s3fs.AccessKeys); err != nil {
 		klog.Errorf("S3FSMounter Mount: Cannot create file %s: %v", passwdFile, err)
 		return fmt.Errorf("S3FSMounter Mount: Cannot create file %s: %v", passwdFile, err)
 	}
 
-	if s3fs.objPath != "" {
-		bucketName = fmt.Sprintf("%s:/%s", s3fs.bucketName, s3fs.objPath)
+	if s3fs.ObjPath != "" {
+		bucketName = fmt.Sprintf("%s:/%s", s3fs.BucketName, s3fs.ObjPath)
 	} else {
-		bucketName = s3fs.bucketName
+		bucketName = s3fs.BucketName
 	}
 
 	args := []string{
@@ -141,35 +144,36 @@ func (s3fs *s3fsMounter) Mount(source string, target string) error {
 		"-o", "sigv2",
 		"-o", "use_path_request_style",
 		"-o", fmt.Sprintf("passwd_file=%s", passwdFile),
-		"-o", fmt.Sprintf("url=%s", s3fs.endPoint),
-		"-o", fmt.Sprintf("endpoint=%s", s3fs.locConstraint),
+		"-o", fmt.Sprintf("url=%s", s3fs.EndPoint),
+		"-o", fmt.Sprintf("endpoint=%s", s3fs.LocConstraint),
 		"-o", "allow_other",
 		"-o", "mp_umask=002",
 	}
 
-	for _, val := range s3fs.mountOptions {
+	for _, val := range s3fs.MountOptions {
 		args = append(args, "-o")
 		args = append(args, val)
 	}
 
-	if s3fs.authType != "hmac" {
+	if s3fs.AuthType != "hmac" {
 		args = append(args, "-o", "ibm_iam_auth")
 		args = append(args, "-o", "ibm_iam_endpoint="+defaultIAMEndPoint)
 	} else {
 		args = append(args, "-o", "default_acl=private")
 	}
-	return fuseMount(target, s3fsCmd, args)
+	//statsUtil := &(utils.VolumeStatsUtils{})
+	return s3fs.StatsUtils.FuseMount(target, s3fsCmd, args)
 }
 
-func (s3fs *s3fsMounter) Unmount(target string) error {
+func (s3fs *S3fsMounter) Unmount(target string) error {
 	klog.Info("-S3FSMounter Unmount-")
 	metaPath := path.Join(metaRoot, fmt.Sprintf("%x", sha256.Sum256([]byte(target))))
 	err := os.RemoveAll(metaPath)
 	if err != nil {
 		return err
 	}
-	statsUtil := &(utils.VolumeStatsUtils{})
-	return statsUtil.FuseUnmount(target)
+	//statsUtil := &(utils.VolumeStatsUtils{})
+	return s3fs.StatsUtils.FuseUnmount(target)
 }
 
 func UpdateS3FSMountOptions(defaultMountOp []string, secretMap map[string]string) ([]string, error) {

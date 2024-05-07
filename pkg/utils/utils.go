@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,11 +15,13 @@ import (
 )
 
 var unmount = syscall.Unmount
+var command = exec.Command
 
 type StatsUtils interface {
 	FSInfo(path string) (int64, int64, int64, int64, int64, int64, error)
 	CheckMount(targetPath string) (bool, error)
 	FuseUnmount(path string) error
+	FuseMount(path string, comm string, args []string) error
 }
 
 type VolumeStatsUtils struct {
@@ -75,6 +78,26 @@ func (su *VolumeStatsUtils) FuseUnmount(path string) error {
 	}
 	klog.Infof("Found fuse pid %v of mount %s, checking if it still runs", process.Pid, path)
 	return waitForProcess(process, 1)
+}
+
+func (su *VolumeStatsUtils) FuseMount(path string, comm string, args []string) error {
+	klog.Info("-fuseMount-")
+	klog.Infof("fuseMount args:\n\tpath: <%s>\n\tcommand: <%s>\n\targs: <%s>", path, comm, args)
+	cmd := command(comm, args...)
+	err := cmd.Start()
+
+	if err != nil {
+		klog.Errorf("fuseMount: cmd start failed: <%s>\nargs: <%s>\nerror: <%v>", comm, args, err)
+		return fmt.Errorf("fuseMount: cmd start failed: <%s>\nargs: <%s>\nerror: <%v>", comm, args, err)
+	}
+	err = cmd.Wait()
+	if err != nil {
+		// Handle error
+		klog.Errorf("fuseMount: cmd wait failed: <%s>\nargs: <%s>\nerror: <%v>", comm, args, err)
+		return fmt.Errorf("fuseMount: cmd wait failed: <%s>\nargs: <%s>\nerror: <%v>", comm, args, err)
+	}
+
+	return waitForMount(path, 10*time.Second)
 }
 
 func isMountpoint(pathname string) (bool, error) {
@@ -151,4 +174,26 @@ func waitForProcess(p *os.Process, backoff int) error {
 	klog.Infof("Fuse process with PID %v still active, waiting...", p.Pid)
 	time.Sleep(time.Duration(backoff*100) * time.Millisecond)
 	return waitForProcess(p, backoff+1)
+}
+
+func waitForMount(path string, timeout time.Duration) error {
+	var elapsed time.Duration
+	var interval = 10 * time.Millisecond
+	for {
+		out, err := exec.Command("mountpoint", path).CombinedOutput()
+		outStr := strings.TrimSpace(string(out))
+		if err != nil {
+			return err
+		}
+		if strings.HasSuffix(outStr, "is a mountpoint") {
+			klog.Infof("Path is a mountpoint: pathname - %s", path)
+			return nil
+		}
+
+		time.Sleep(interval)
+		elapsed = elapsed + interval
+		if elapsed >= timeout {
+			return errors.New("timeout waiting for mount")
+		}
+	}
 }

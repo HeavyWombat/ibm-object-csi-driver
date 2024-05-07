@@ -26,7 +26,7 @@ type FakeRcloneMounter struct {
 	UnmountFunc func(target string) error
 }
 
-func fakenewRcloneMounter(secretMap map[string]string, mountOptions []string) (mounter.Mounter, error) {
+func FakeNewRcloneMounter(secretMap map[string]string, mountOptions []string) (mounter.Mounter, error) {
 	klog.Infof("-newS3fsMounter-")
 
 	var (
@@ -35,22 +35,22 @@ func fakenewRcloneMounter(secretMap map[string]string, mountOptions []string) (m
 		accessKey   string
 		secretKey   string
 		apiKey      string
-		fakemounter *mounter.rcloneMounter
+		fakemounter *mounter.RcloneMounter
 	)
 
-	fakemounter = &rcloneMounter{}
+	fakemounter = &(mounter.RcloneMounter{})
 
 	if val, check = secretMap["cosEndpoint"]; check {
-		fakemounter.endPoint = val
+		fakemounter.EndPoint = val
 	}
 	if val, check = secretMap["locationConstraint"]; check {
-		fakemounter.locConstraint = val
+		fakemounter.LocConstraint = val
 	}
 	if val, check = secretMap["bucketName"]; check {
-		fakemounter.bucketName = val
+		fakemounter.BucketName = val
 	}
 	if val, check = secretMap["objPath"]; check {
-		fakemounter.objPath = val
+		fakemounter.ObjPath = val
 	}
 	if val, check = secretMap["accessKey"]; check {
 		accessKey = val
@@ -59,40 +59,39 @@ func fakenewRcloneMounter(secretMap map[string]string, mountOptions []string) (m
 		secretKey = val
 	}
 	if val, check = secretMap["kpRootKeyCRN"]; check {
-		fakemounter.kpRootKeyCrn = val
+		fakemounter.KpRootKeyCrn = val
 	}
 	if val, check = secretMap["apiKey"]; check {
 		apiKey = val
 	}
 	if apiKey != "" {
-		fakemounter.accessKeys = fmt.Sprintf(":%s", apiKey)
-		fakemounter.authType = "iam"
+		fakemounter.AccessKeys = fmt.Sprintf(":%s", apiKey)
+		fakemounter.AuthType = "iam"
 	} else {
-		fakemounter.accessKeys = fmt.Sprintf("%s:%s", accessKey, secretKey)
-		fakemounter.authType = "hmac"
+		fakemounter.AccessKeys = fmt.Sprintf("%s:%s", accessKey, secretKey)
+		fakemounter.AuthType = "hmac"
 	}
 
 	if val, check = secretMap["gid"]; check {
-		fakemounter.gid = val
+		fakemounter.Gid = val
 	}
 	if secretMap["gid"] != "" && secretMap["uid"] == "" {
-		fakemounter.uid = secretMap["gid"]
+		fakemounter.Uid = secretMap["gid"]
 	} else if secretMap["uid"] != "" {
-		fakemounter.uid = secretMap["uid"]
+		fakemounter.Uid = secretMap["uid"]
 	}
 
 	klog.Infof("newRcloneMounter args:\n\tbucketName: [%s]\n\tobjPath: [%s]\n\tendPoint: [%s]\n\tlocationConstraint: [%s]\n\tauthType: [%s]",
-		fakemounter.bucketName, fakemounter.objPath, fakemounter.endPoint, fakemounter.locConstraint, fakemounter.authType)
+		fakemounter.BucketName, fakemounter.ObjPath, fakemounter.EndPoint, fakemounter.LocConstraint, fakemounter.AuthType)
 
 	updatedOptions, err := mounter.UpdateMountOptions(mountOptions, secretMap)
 
 	if err != nil {
 		klog.Infof("Problems with retrieving secret map dynamically %v", err)
 	}
-	fakemounter.mountOptions = updatedOptions
+	fakemounter.MountOptions = updatedOptions
 
 	return fakemounter, nil
-	//return &FakeRcloneMounter{}, nil
 }
 
 func (f *FakeRcloneMounter) Mount(source string, target string) error {
