@@ -33,7 +33,7 @@ type S3fsMounter struct {
 	AccessKeys    string
 	KpRootKeyCrn  string
 	MountOptions  []string
-	StatsUtils    utils.VolumeStatsUtils
+	StatsUtils    utils.StatsUtils
 }
 
 const (
@@ -44,7 +44,7 @@ const (
 	defaultIAMEndPoint = "https://iam.cloud.ibm.com"
 )
 
-func NewS3fsMounter(secretMap map[string]string, mountOptions []string, statsUtils utils.VolumeStatsUtils) (Mounter, error) {
+func NewS3fsMounter(secretMap map[string]string, mountOptions []string, statsUtils utils.StatsUtils) (Mounter, error) {
 	klog.Info("-newS3fsMounter-")
 
 	var (

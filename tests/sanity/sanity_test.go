@@ -222,6 +222,10 @@ func (su *FakeNewVolumeStatsUtils) FuseUnmount(path string) error {
 	return nil
 }
 
+func (su *FakeNewVolumeStatsUtils) FuseMount(path string, comm string, args []string) error {
+	return nil
+}
+
 func createTargetDir(targetPath string) error {
 	fileInfo, err := os.Stat(targetPath)
 	if err != nil && os.IsNotExist(err) {

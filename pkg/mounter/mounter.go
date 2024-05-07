@@ -2,9 +2,10 @@ package mounter
 
 import (
 	"errors"
-	"k8s.io/klog/v2"
 	"os"
 	"syscall"
+
+	"k8s.io/klog/v2"
 
 	"github.com/IBM/ibm-object-csi-driver/pkg/utils"
 )
@@ -48,12 +49,12 @@ func (s *S3fsMounterFactory) NewMounter(attrib map[string]string, secretMap map[
 
 	switch mounter {
 	case s3fsMounterType:
-		return NewS3fsMounter(secretMap, mountFlags, *statsUtils)
+		return NewS3fsMounter(secretMap, mountFlags, statsUtils)
 	case rcloneMounterType:
 		return NewRcloneMounter(secretMap, mountFlags, *statsUtils)
 	default:
 		// default to s3backer
-		return NewS3fsMounter(secretMap, mountFlags, *statsUtils)
+		return NewS3fsMounter(secretMap, mountFlags, statsUtils)
 	}
 }
 
